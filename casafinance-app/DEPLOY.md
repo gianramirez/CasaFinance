@@ -82,7 +82,7 @@ You'll create your account through the app after deploying, but if you want to s
 | `SUPABASE_URL` | `https://xxxxx.supabase.co` | All |
 | `SUPABASE_ANON_KEY` | Your anon key | All |
 | `SUPABASE_SERVICE_ROLE_KEY` | Your service role key | All |
-| `ANTHROPIC_API_KEY` | `sk-ant-...` | All |
+| `CASAFINANCE` | `sk-ant-...` | All |
 | `ALLOWED_ORIGIN` | `https://your-project.vercel.app` | All |
 
 7. Click **Deploy**
@@ -104,7 +104,7 @@ vercel env add VITE_SUPABASE_ANON_KEY
 vercel env add SUPABASE_URL
 vercel env add SUPABASE_ANON_KEY
 vercel env add SUPABASE_SERVICE_ROLE_KEY
-vercel env add ANTHROPIC_API_KEY
+vercel env add CASAFINANCE
 vercel env add ALLOWED_ORIGIN
 
 # Redeploy with env vars

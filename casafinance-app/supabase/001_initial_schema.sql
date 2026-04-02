@@ -207,6 +207,7 @@ create unique index idx_ai_summaries_unique on public.ai_summaries(user_id, year
 create or replace function public.update_updated_at()
 returns trigger
 language plpgsql
+security definer set search_path = public
 as $$
 begin
   new.updated_at = now();

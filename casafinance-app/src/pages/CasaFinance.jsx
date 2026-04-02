@@ -116,7 +116,28 @@ function Celebration({ cardName, onClose }) {
   );
 }
 
-function BillCard({ bill, payment, onPay, onUndo }) {
+function EditBillModal({ bill, onConfirm, onClose }) {
+  const [amount, setAmount] = useState(bill.amount.toString());
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: C.card, borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 420, padding: '28px 24px 36px', boxShadow: '0 -8px 40px rgba(0,0,0,0.15)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 18, color: C.text }}>Edit Bill Amount</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: C.textMut }}>✕</button>
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: C.primary, marginBottom: 4 }}>{bill.name}</div>
+        <div style={{ fontSize: 13, color: C.textMut, marginBottom: 16 }}>Current: {fmt(bill.amount)}</div>
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 6 }}>New amount</label>
+        <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: 10, border: `1px solid ${C.cardBorder}`, fontSize: 18, fontWeight: 700, marginBottom: 24, boxSizing: 'border-box' }} />
+        <button onClick={() => { const a = parseFloat(amount); if (!isNaN(a) && a >= 0) onConfirm(bill.id, { amount: a }); }} style={{ width: '100%', padding: '14px', borderRadius: 12, background: C.primary, color: '#fff', border: 'none', fontSize: 16, fontWeight: 700, cursor: 'pointer', boxShadow: `0 4px 14px ${C.primary}44` }}>
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BillCard({ bill, payment, onPay, onUndo, onEdit }) {
   const isPaid = !!payment;
   const urg = URG[getUrgency(bill.due_day, isPaid)];
 
@@ -129,7 +150,7 @@ function BillCard({ bill, payment, onPay, onUndo }) {
         {isPaid && <div style={{ fontSize: 11, color: C.success, marginTop: 2 }}>Paid {payment.paid_date} • {payment.account_used}</div>}
       </div>
       <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: isPaid ? C.success : C.text }}>{fmt(bill.amount)}</div>
+        <button onClick={() => onEdit(bill)} style={{ fontSize: 16, fontWeight: 700, color: isPaid ? C.success : C.text, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>{fmt(bill.amount)}</button>
         {bill.is_active && !isPaid && (
           <button onClick={() => onPay(bill)} style={{ padding: '6px 14px', borderRadius: 8, background: C.primary, color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Pay</button>
         )}
@@ -178,11 +199,12 @@ function DebtCard({ debt, onUpdate }) {
 export default function CasaFinance() {
   const { user, signOut } = useAuth();
   const [tab, setTab] = useState('dashboard');
-  const { bills, loading: billsLoading } = useBills();
+  const { bills, loading: billsLoading, updateBill } = useBills();
   const { payments, markPaid, undoPayment } = useBillPayments(curMonth, curYear);
   const { debts, updateBalance, loading: debtsLoading } = useDebtAccounts();
   const [payModal, setPayModal] = useState(null);
   const [debtModal, setDebtModal] = useState(null);
+  const [editModal, setEditModal] = useState(null);
   const [celebration, setCelebration] = useState(null);
   const [aiMessages, setAiMessages] = useState([
     { role: 'assistant', text: '¡Hola! I\'m your CasaFinance assistant. I know your bills, debts, and paycheck schedule. Ask me anything!' }
@@ -196,6 +218,11 @@ export default function CasaFinance() {
   const handlePay = async (data) => {
     await markPaid(data);
     setPayModal(null);
+  };
+
+  const handleEditBill = async (id, updates) => {
+    await updateBill(id, updates);
+    setEditModal(null);
   };
 
   const handleDebtUpdate = async (id, newBal) => {
@@ -319,13 +346,13 @@ export default function CasaFinance() {
       <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 10 }}>Paycheck 1</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
         {pc1.sort((a, b) => a.due_day - b.due_day).map(b => (
-          <BillCard key={b.id} bill={b} payment={payments[b.id]} onPay={setPayModal} onUndo={async (id) => { await undoPayment(id); }} />
+          <BillCard key={b.id} bill={b} payment={payments[b.id]} onPay={setPayModal} onUndo={async (id) => { await undoPayment(id); }} onEdit={setEditModal} />
         ))}
       </div>
       <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 10 }}>Paycheck 2</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {pc2.map(b => (
-          <BillCard key={b.id} bill={b} payment={payments[b.id]} onPay={setPayModal} onUndo={async (id) => { await undoPayment(id); }} />
+          <BillCard key={b.id} bill={b} payment={payments[b.id]} onPay={setPayModal} onUndo={async (id) => { await undoPayment(id); }} onEdit={setEditModal} />
         ))}
       </div>
     </div>
@@ -409,6 +436,7 @@ export default function CasaFinance() {
 
       {payModal && <PayModal bill={payModal} onConfirm={handlePay} onClose={() => setPayModal(null)} />}
       {debtModal && <DebtModal debt={debtModal} onConfirm={handleDebtUpdate} onClose={() => setDebtModal(null)} />}
+      {editModal && <EditBillModal bill={editModal} onConfirm={handleEditBill} onClose={() => setEditModal(null)} />}
       {celebration && <Celebration cardName={celebration} onClose={() => setCelebration(null)} />}
     </div>
   );

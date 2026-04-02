@@ -3,7 +3,7 @@
 -- Run this in your Supabase SQL Editor (or as a migration)
 -- ============================================================
 
--- Enable UUID extension
+-- Enable UUID extension for generating unique IDs
 create extension if not exists "uuid-ossp";
 
 -- ──────────────────────────────────────────────

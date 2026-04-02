@@ -150,7 +150,10 @@ function BillCard({ bill, payment, onPay, onUndo, onEdit }) {
         {isPaid && <div style={{ fontSize: 11, color: C.success, marginTop: 2 }}>Paid {payment.paid_date} • {payment.account_used}</div>}
       </div>
       <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-        <button onClick={() => onEdit(bill)} style={{ fontSize: 16, fontWeight: 700, color: isPaid ? C.success : C.text, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>{fmt(bill.amount)}</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: isPaid ? C.success : C.text }}>{fmt(bill.amount)}</div>
+          <button onClick={() => onEdit(bill)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', fontSize: 13, color: C.textMut }}>✏️</button>
+        </div>
         {bill.is_active && !isPaid && (
           <button onClick={() => onPay(bill)} style={{ padding: '6px 14px', borderRadius: 8, background: C.primary, color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Pay</button>
         )}

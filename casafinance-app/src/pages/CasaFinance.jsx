@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { useBills, useBillPayments, useDebtAccounts } from '../hooks/useData';
+import { useBills, useBillPayments, useDebtAccounts, useTransactions, useAccountBalances, useSpendingAlerts, computeSpendingTrends } from '../hooks/useData';
 import { supabase } from '../lib/supabase';
 
 // ─── Color Tokens ───
@@ -16,6 +16,9 @@ const C = {
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const CAT_ICONS = { Debt: '💳', Utility: '⚡', Phone: '📱', Home: '🏠', Subscription: '📺', Mortgage: '🏡' };
+const SPEND_ICONS = { Groceries: '🛒', Dining: '🍽️', Gas: '⛽', Shopping: '🛍️', Entertainment: '🎬', Transportation: '🚗', Health: '💊', Home: '🏠', Utilities: '⚡', Subscription: '📺', Other: '📄' };
+const SPEND_CATEGORIES = ['Groceries', 'Dining', 'Gas', 'Shopping', 'Entertainment', 'Transportation', 'Health', 'Home', 'Utilities', 'Subscription', 'Other'];
+const CAT_COLORS = { Groceries: '#2D9CDB', Dining: '#F2994A', Gas: '#6FCF97', Shopping: '#BB6BD9', Entertainment: '#EB5757', Transportation: '#56CCF2', Health: '#27AE60', Home: '#F2C94C', Utilities: '#219653', Subscription: '#9B51E0', Other: '#828282' };
 const fmt = (n) => parseFloat(n).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
 const today = new Date();
@@ -137,6 +140,121 @@ function EditBillModal({ bill, onConfirm, onClose }) {
   );
 }
 
+function TransactionModal({ initial, onConfirm, onClose }) {
+  const [merchant, setMerchant] = useState(initial?.merchant || '');
+  const [amount, setAmount] = useState(initial?.amount?.toString() || '');
+  const [date, setDate] = useState(initial?.date || today.toISOString().split('T')[0]);
+  const [category, setCategory] = useState(initial?.category || 'Other');
+  const [account, setAccount] = useState(initial?.account || 'huntington');
+  const [note, setNote] = useState(initial?.note || '');
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: C.card, borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 420, padding: '28px 24px 36px', boxShadow: '0 -8px 40px rgba(0,0,0,0.15)', maxHeight: '85vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 18, color: C.text }}>{initial?.id ? 'Edit Transaction' : 'Add Transaction'}</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: C.textMut }}>✕</button>
+        </div>
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 6 }}>Merchant</label>
+        <input value={merchant} onChange={e => setMerchant(e.target.value)} placeholder="e.g. Walmart, Chipotle" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.cardBorder}`, fontSize: 15, marginBottom: 14, boxSizing: 'border-box' }} />
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 6 }}>Amount</label>
+        <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.cardBorder}`, fontSize: 15, marginBottom: 14, boxSizing: 'border-box' }} />
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 6 }}>Date</label>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.cardBorder}`, fontSize: 15, marginBottom: 14, boxSizing: 'border-box' }} />
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 6 }}>Category</label>
+        <select value={category} onChange={e => setCategory(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.cardBorder}`, fontSize: 15, marginBottom: 14, boxSizing: 'border-box', background: C.card }}>
+          {SPEND_CATEGORIES.map(c => <option key={c} value={c}>{SPEND_ICONS[c]} {c}</option>)}
+        </select>
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 6 }}>Account</label>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+          {[['huntington', 'Huntington'], ['chase', 'Chase']].map(([v, l]) => (
+            <button key={v} onClick={() => setAccount(v)} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `2px solid ${account === v ? C.primary : C.cardBorder}`, background: account === v ? C.primaryLight : C.card, color: account === v ? C.primary : C.textSec, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>{l}</button>
+          ))}
+        </div>
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 6 }}>Note (optional)</label>
+        <input value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. weekly groceries" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.cardBorder}`, fontSize: 15, marginBottom: 20, boxSizing: 'border-box' }} />
+        <button onClick={() => {
+          const a = parseFloat(amount);
+          if (!merchant.trim() || isNaN(a) || a <= 0) return;
+          onConfirm({ id: initial?.id, merchant: merchant.trim(), amount: a, transaction_date: date, category, account, note, receipt_image_path: initial?.receipt_image_path, ai_extracted: initial?.ai_extracted || false });
+        }} style={{ width: '100%', padding: '14px', borderRadius: 12, background: C.primary, color: '#fff', border: 'none', fontSize: 16, fontWeight: 700, cursor: 'pointer', boxShadow: `0 4px 14px ${C.primary}44` }}>
+          {initial?.id ? 'Save Changes' : 'Add Transaction'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SetBalanceModal({ current, onConfirm, onClose }) {
+  const [account, setAccount] = useState('huntington');
+  const [balance, setBalance] = useState('');
+  const [note, setNote] = useState('');
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: C.card, borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 420, padding: '28px 24px 36px', boxShadow: '0 -8px 40px rgba(0,0,0,0.15)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 18, color: C.text }}>Set Balance</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: C.textMut }}>✕</button>
+        </div>
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 6 }}>Account</label>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+          {[['huntington', 'Huntington'], ['chase', 'Chase']].map(([v, l]) => (
+            <button key={v} onClick={() => setAccount(v)} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `2px solid ${account === v ? C.primary : C.cardBorder}`, background: account === v ? C.primaryLight : C.card, color: account === v ? C.primary : C.textSec, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>{l}</button>
+          ))}
+        </div>
+        {current[account] && <div style={{ fontSize: 13, color: C.textMut, marginBottom: 12 }}>Current: {fmt(current[account].balance)} (set {current[account].effective_date})</div>}
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 6 }}>New balance</label>
+        <input type="number" step="0.01" value={balance} onChange={e => setBalance(e.target.value)} placeholder="0.00" style={{ width: '100%', padding: '12px', borderRadius: 10, border: `1px solid ${C.cardBorder}`, fontSize: 18, fontWeight: 700, marginBottom: 14, boxSizing: 'border-box' }} />
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 6 }}>Note (optional)</label>
+        <input value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. Paycheck 1 deposit" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.cardBorder}`, fontSize: 15, marginBottom: 20, boxSizing: 'border-box' }} />
+        <button onClick={() => { const b = parseFloat(balance); if (!isNaN(b) && b >= 0) onConfirm(account, b, note); }} style={{ width: '100%', padding: '14px', borderRadius: 12, background: C.primary, color: '#fff', border: 'none', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
+          Set Balance
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AlertConfigModal({ alerts, onSave, onRemove, onClose }) {
+  const [account, setAccount] = useState('huntington');
+  const [threshold, setThreshold] = useState(alerts?.huntington?.threshold?.toString() || '200');
+
+  const handleAccountChange = (acc) => {
+    setAccount(acc);
+    setThreshold(alerts?.[acc]?.threshold?.toString() || '200');
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: C.card, borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 420, padding: '28px 24px 36px', boxShadow: '0 -8px 40px rgba(0,0,0,0.15)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 18, color: C.text }}>Spending Alerts</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: C.textMut }}>✕</button>
+        </div>
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 6 }}>Account</label>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+          {[['huntington', 'Huntington'], ['chase', 'Chase']].map(([v, l]) => (
+            <button key={v} onClick={() => handleAccountChange(v)} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `2px solid ${account === v ? C.primary : C.cardBorder}`, background: account === v ? C.primaryLight : C.card, color: account === v ? C.primary : C.textSec, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>{l}</button>
+          ))}
+        </div>
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 6 }}>Alert when balance drops below</label>
+        <input type="number" step="50" value={threshold} onChange={e => setThreshold(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: 10, border: `1px solid ${C.cardBorder}`, fontSize: 18, fontWeight: 700, marginBottom: 20, boxSizing: 'border-box' }} />
+        <div style={{ display: 'flex', gap: 10 }}>
+          {alerts?.[account] && (
+            <button onClick={() => { onRemove(account); onClose(); }} style={{ flex: 1, padding: '14px', borderRadius: 12, background: C.dangerLight, color: C.danger, border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+              Remove Alert
+            </button>
+          )}
+          <button onClick={() => { const t = parseFloat(threshold); if (!isNaN(t) && t > 0) { onSave(account, t); onClose(); } }} style={{ flex: 1, padding: '14px', borderRadius: 12, background: C.primary, color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+            Save Alert
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BillCard({ bill, payment, onPay, onUndo, onEdit }) {
   const isPaid = !!payment;
   const urg = URG[getUrgency(bill.due_day, isPaid)];
@@ -205,10 +323,20 @@ export default function CasaFinance() {
   const { bills, loading: billsLoading, updateBill } = useBills();
   const { payments, markPaid, undoPayment } = useBillPayments(curMonth, curYear);
   const { debts, updateBalance, loading: debtsLoading } = useDebtAccounts();
+  const { transactions, addTransaction, updateTransaction, deleteTransaction } = useTransactions(curMonth, curYear);
+  const { balances, setBalance: setAccountBalance } = useAccountBalances();
+  const { alerts: spendingAlerts, setAlert: setSpendingAlert, removeAlert: removeSpendingAlert } = useSpendingAlerts();
   const [payModal, setPayModal] = useState(null);
   const [debtModal, setDebtModal] = useState(null);
   const [editModal, setEditModal] = useState(null);
   const [celebration, setCelebration] = useState(null);
+  const [txnModal, setTxnModal] = useState(null);
+  const [balanceModal, setBalanceModal] = useState(false);
+  const [alertModal, setAlertModal] = useState(false);
+  const [receiptProcessing, setReceiptProcessing] = useState(false);
+  const [spendCatFilter, setSpendCatFilter] = useState('All');
+  const [showTrends, setShowTrends] = useState(false);
+  const receiptInputRef = useRef(null);
   const [aiMessages, setAiMessages] = useState([
     { role: 'assistant', text: '¡Hola! I\'m your CasaFinance assistant. I know your bills, debts, and paycheck schedule. Ask me anything!' }
   ]);
@@ -237,6 +365,97 @@ export default function CasaFinance() {
     setDebtModal(null);
   };
 
+  // Receipt upload handler
+  const handleReceiptUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setReceiptProcessing(true);
+
+    try {
+      // Convert to base64
+      const base64 = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.readAsDataURL(file);
+      });
+
+      // Upload to Supabase Storage
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+      await supabase.storage.from('receipts').upload(path, file);
+
+      // Process with Claude vision
+      const session = await supabase.auth.getSession();
+      const resp = await fetch('/api/process-receipt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.data.session?.access_token}`,
+        },
+        body: JSON.stringify({ imageBase64: base64, mediaType: file.type || 'image/jpeg' }),
+      });
+      const result = await resp.json();
+      const extracted = result.data || {};
+
+      setTxnModal({
+        merchant: extracted.merchant || '',
+        amount: extracted.amount || '',
+        date: extracted.date || today.toISOString().split('T')[0],
+        category: extracted.category || 'Other',
+        account: 'huntington',
+        receipt_image_path: path,
+        ai_extracted: true,
+      });
+    } catch (err) {
+      console.error('Receipt processing failed:', err);
+      setTxnModal({ account: 'huntington', ai_extracted: false });
+    }
+    setReceiptProcessing(false);
+    if (receiptInputRef.current) receiptInputRef.current.value = '';
+  };
+
+  // Transaction save handler
+  const handleSaveTransaction = async (txn) => {
+    if (txn.id) {
+      const { id, ...updates } = txn;
+      await updateTransaction(id, updates);
+    } else {
+      await addTransaction(txn);
+    }
+    setTxnModal(null);
+  };
+
+  // Computed available balances
+  const getAvailableBalance = (account) => {
+    const latest = balances[account];
+    if (!latest) return null;
+    const baseBalance = parseFloat(latest.balance);
+    const effectiveDate = latest.effective_date;
+
+    const txnSpent = transactions
+      .filter(t => t.account === account && t.transaction_date >= effectiveDate)
+      .reduce((s, t) => s + parseFloat(t.amount), 0);
+
+    const billSpent = Object.values(payments)
+      .filter(p => p.account_used === account && p.paid_date >= effectiveDate)
+      .reduce((s, p) => s + parseFloat(p.amount_paid), 0);
+
+    return baseBalance - txnSpent - billSpent;
+  };
+
+  const chaseAvailable = getAvailableBalance('chase');
+  const huntingtonAvailable = getAvailableBalance('huntington');
+  const trends = computeSpendingTrends(transactions);
+
+  // Alert checks
+  const getAlertStatus = (account, available) => {
+    const alert = spendingAlerts[account];
+    if (!alert || !alert.is_active || available === null) return null;
+    if (available <= alert.threshold) return 'danger';
+    if (available <= alert.threshold * 1.5) return 'warning';
+    return null;
+  };
+
   const activeBills = bills.filter(b => b.is_active);
   const pc1 = bills.filter(b => b.paycheck === 1);
   const pc2 = bills.filter(b => b.paycheck === 2);
@@ -253,7 +472,9 @@ export default function CasaFinance() {
     setAiMessages(prev => [...prev, { role: 'user', text: msg }]);
     setAiLoading(true);
 
-    const context = `Bills paid: ${paidCount}/${activeBills.length}. PC1 remaining: ${fmt(pc1Total - pc1Paid)}. Total debt: ${fmt(totalDebt)}. Debts: ${debts.map(d => `${d.name}: ${fmt(d.current_balance)} at ${d.apr}%${d.is_eliminated ? ' ELIMINATED' : ''}`).join('; ')}`;
+    const topCats = trends.byCategory.slice(0, 3).map(c => `${c.category}: ${fmt(c.total)}`).join(', ');
+    const peakDay = trends.byDayOfWeek.reduce((max, d) => d.total > max.total ? d : max, { day: 'N/A', total: 0 });
+    const context = `Bills paid: ${paidCount}/${activeBills.length}. PC1 remaining: ${fmt(pc1Total - pc1Paid)}. Total debt: ${fmt(totalDebt)}. Debts: ${debts.map(d => `${d.name}: ${fmt(d.current_balance)} at ${d.apr}%${d.is_eliminated ? ' ELIMINATED' : ''}`).join('; ')}. Chase balance: ${chaseAvailable !== null ? fmt(chaseAvailable) : 'not set'}. Huntington balance: ${huntingtonAvailable !== null ? fmt(huntingtonAvailable) : 'not set'}. This month: ${fmt(trends.grandTotal || 0)} spent across ${transactions.length} transactions. Top categories: ${topCats || 'none yet'}. Peak spending day: ${peakDay.day}.`;
 
     try {
       const resp = await fetch('/api/ai-chat', {
@@ -278,6 +499,7 @@ export default function CasaFinance() {
   const navItems = [
     { id: 'dashboard', label: 'Home', emoji: '🏠' },
     { id: 'bills', label: 'Bills', emoji: '📋' },
+    { id: 'spending', label: 'Spending', emoji: '🧾' },
     { id: 'debt', label: 'Debt', emoji: '📉' },
     { id: 'ai', label: 'AI', emoji: '🤖' },
   ];
@@ -304,6 +526,20 @@ export default function CasaFinance() {
           <div style={{ fontSize: 22, fontWeight: 800, color: C.primary, marginTop: 4 }}>{paidCount}/{activeBills.length}</div>
         </div>
       </div>
+
+      {/* Account Balances */}
+      {(chaseAvailable !== null || huntingtonAvailable !== null) && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+          <div style={{ background: C.card, borderRadius: 14, padding: '14px 14px', border: `1px solid ${getAlertStatus('chase', chaseAvailable) === 'danger' ? C.danger : getAlertStatus('chase', chaseAvailable) === 'warning' ? C.accent : C.cardBorder}` }}>
+            <div style={{ fontSize: 11, color: C.textMut, fontWeight: 600 }}>Chase</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: getAlertStatus('chase', chaseAvailable) === 'danger' ? C.danger : getAlertStatus('chase', chaseAvailable) === 'warning' ? C.accent : C.primary, marginTop: 4 }}>{chaseAvailable !== null ? fmt(chaseAvailable) : '—'}</div>
+          </div>
+          <div style={{ background: C.card, borderRadius: 14, padding: '14px 14px', border: `1px solid ${getAlertStatus('huntington', huntingtonAvailable) === 'danger' ? C.danger : getAlertStatus('huntington', huntingtonAvailable) === 'warning' ? C.accent : C.cardBorder}` }}>
+            <div style={{ fontSize: 11, color: C.textMut, fontWeight: 600 }}>Huntington</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: getAlertStatus('huntington', huntingtonAvailable) === 'danger' ? C.danger : getAlertStatus('huntington', huntingtonAvailable) === 'warning' ? C.accent : C.primary, marginTop: 4 }}>{huntingtonAvailable !== null ? fmt(huntingtonAvailable) : '—'}</div>
+          </div>
+        </div>
+      )}
 
       {/* PC1 summary */}
       <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.cardBorder}`, padding: 18, marginBottom: 14 }}>
@@ -398,6 +634,187 @@ export default function CasaFinance() {
     </div>
   );
 
+  // ─── SPENDING ───
+  const filteredTxns = spendCatFilter === 'All' ? transactions : transactions.filter(t => t.category === spendCatFilter);
+  const groupedTxns = filteredTxns.reduce((groups, t) => {
+    const d = t.transaction_date;
+    if (!groups[d]) groups[d] = [];
+    groups[d].push(t);
+    return groups;
+  }, {});
+
+  const Spending = () => (
+    <div style={{ padding: '20px 16px 100px' }}>
+      {/* Alert Banner */}
+      {['huntington', 'chase'].map(acc => {
+        const avail = acc === 'huntington' ? huntingtonAvailable : chaseAvailable;
+        const status = getAlertStatus(acc, avail);
+        if (status !== 'danger') return null;
+        return (
+          <div key={acc} style={{ background: C.danger, borderRadius: 12, padding: '12px 16px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 20 }}>⚠️</span>
+            <div style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>
+              {acc.charAt(0).toUpperCase() + acc.slice(1)} balance is low: {fmt(avail)} remaining
+            </div>
+          </div>
+        );
+      })}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+        <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>Spending</div>
+        <button onClick={() => setAlertModal(true)} style={{ background: 'none', border: `1px solid ${C.cardBorder}`, borderRadius: 8, padding: '6px 10px', fontSize: 16, cursor: 'pointer' }}>⚙️</button>
+      </div>
+
+      {/* Balance Header */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+        {[['chase', 'Chase', chaseAvailable], ['huntington', 'Huntington', huntingtonAvailable]].map(([acc, label, avail]) => {
+          const status = getAlertStatus(acc, avail);
+          return (
+            <div key={acc} onClick={() => setBalanceModal(true)} style={{ background: status === 'danger' ? C.dangerLight : status === 'warning' ? C.accentLight : C.primaryLight, borderRadius: 14, padding: '14px', cursor: 'pointer', border: `1px solid ${status === 'danger' ? C.danger + '44' : status === 'warning' ? C.accent + '44' : C.primary + '22'}` }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: C.textMut }}>{label}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: status === 'danger' ? C.danger : status === 'warning' ? C.accent : C.primary, marginTop: 4 }}>
+                {avail !== null ? fmt(avail) : 'Set balance'}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Action Buttons */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+        <input ref={receiptInputRef} type="file" accept="image/*" capture="environment" onChange={handleReceiptUpload} style={{ display: 'none' }} />
+        <button onClick={() => receiptInputRef.current?.click()} disabled={receiptProcessing} style={{ flex: 1, padding: '12px', borderRadius: 12, background: C.primary, color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: receiptProcessing ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          {receiptProcessing ? '🔄 Processing...' : '📷 Add Receipt'}
+        </button>
+        <button onClick={() => setTxnModal({ account: 'huntington' })} style={{ flex: 1, padding: '12px', borderRadius: 12, background: C.card, color: C.primary, border: `2px solid ${C.primary}`, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+          + Manual Entry
+        </button>
+      </div>
+
+      {/* Monthly Summary */}
+      <div style={{ background: C.card, borderRadius: 14, border: `1px solid ${C.cardBorder}`, padding: '14px 16px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <div style={{ fontSize: 12, color: C.textMut, fontWeight: 600 }}>This month</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: C.text }}>{fmt(trends.grandTotal || 0)}</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 12, color: C.textMut }}>{transactions.length} transactions</div>
+          <div style={{ fontSize: 12, color: C.textSec }}>~{fmt(trends.dailyAverage || 0)}/day avg</div>
+        </div>
+      </div>
+
+      {/* Category Filter Pills */}
+      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 16, paddingBottom: 4 }}>
+        {['All', ...SPEND_CATEGORIES].map(cat => (
+          <button key={cat} onClick={() => setSpendCatFilter(cat)} style={{ padding: '6px 14px', borderRadius: 20, border: `1px solid ${spendCatFilter === cat ? C.primary : C.cardBorder}`, background: spendCatFilter === cat ? C.primaryLight : C.card, color: spendCatFilter === cat ? C.primary : C.textSec, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {cat !== 'All' && SPEND_ICONS[cat]} {cat}
+          </button>
+        ))}
+      </div>
+
+      {/* Transaction List */}
+      {Object.keys(groupedTxns).length === 0 && (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: C.textMut }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>🧾</div>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>No transactions yet</div>
+          <div style={{ fontSize: 13, marginTop: 4 }}>Upload a receipt or add a manual entry</div>
+        </div>
+      )}
+      {Object.entries(groupedTxns).sort(([a], [b]) => b.localeCompare(a)).map(([date, txns]) => (
+        <div key={date} style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.textMut, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            {new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {txns.map(t => (
+              <div key={t.id} style={{ background: C.card, borderRadius: 12, border: `1px solid ${C.cardBorder}`, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ fontSize: 20, width: 32, textAlign: 'center' }}>{SPEND_ICONS[t.category] || '📄'}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.merchant}</div>
+                  <div style={{ fontSize: 11, color: C.textMut, marginTop: 2 }}>
+                    {t.category} • {t.account}{t.ai_extracted ? ' • AI' : ''}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{fmt(t.amount)}</div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                    <button onClick={() => setTxnModal(t)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: C.textMut, padding: 0 }}>✏️</button>
+                    <button onClick={() => deleteTransaction(t.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: C.textMut, padding: 0 }}>🗑️</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {/* Trends Section */}
+      {transactions.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <button onClick={() => setShowTrends(!showTrends)} style={{ width: '100%', padding: '14px 16px', borderRadius: 14, background: C.card, border: `1px solid ${C.cardBorder}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>📊 Trends & Patterns</span>
+            <span style={{ fontSize: 16, color: C.textMut }}>{showTrends ? '▲' : '▼'}</span>
+          </button>
+          {showTrends && (
+            <div style={{ background: C.card, borderRadius: '0 0 14px 14px', border: `1px solid ${C.cardBorder}`, borderTop: 'none', padding: '16px' }}>
+              {/* Category Breakdown */}
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 10 }}>By Category</div>
+              {trends.byCategory.map(c => (
+                <div key={c.category} style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.textSec, marginBottom: 3 }}>
+                    <span>{SPEND_ICONS[c.category]} {c.category}</span>
+                    <span>{fmt(c.total)} ({c.pct.toFixed(0)}%)</span>
+                  </div>
+                  <div style={{ height: 6, borderRadius: 3, background: C.grayLight, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', borderRadius: 3, background: CAT_COLORS[c.category] || C.primary, width: `${c.pct}%` }} />
+                  </div>
+                </div>
+              ))}
+
+              {/* Day of Week */}
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginTop: 20, marginBottom: 10 }}>By Day of Week</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: 80, gap: 4 }}>
+                {trends.byDayOfWeek.map(d => {
+                  const maxTotal = Math.max(...trends.byDayOfWeek.map(x => x.total));
+                  const h = maxTotal > 0 ? (d.total / maxTotal * 60) : 0;
+                  const isPeak = d.total === maxTotal && d.total > 0;
+                  return (
+                    <div key={d.day} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                      <div style={{ fontSize: 10, color: C.textMut, fontWeight: 600 }}>{fmt(d.total)}</div>
+                      <div style={{ width: '100%', height: h, borderRadius: 4, background: isPeak ? C.accent : C.primary + '66' }} />
+                      <div style={{ fontSize: 10, color: isPeak ? C.accent : C.textMut, fontWeight: isPeak ? 700 : 500 }}>{d.day}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              {(() => {
+                const peak = trends.byDayOfWeek.reduce((max, d) => d.total > max.total ? d : max, { day: 'N/A', total: 0 });
+                return peak.total > 0 ? (
+                  <div style={{ fontSize: 12, color: C.accent, fontWeight: 600, textAlign: 'center', marginTop: 8 }}>
+                    You spend the most on {peak.day}s
+                  </div>
+                ) : null;
+              })()}
+
+              {/* Top Merchants */}
+              {trends.byMerchant.length > 0 && (
+                <>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginTop: 20, marginBottom: 10 }}>Top Merchants</div>
+                  {trends.byMerchant.map((m, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 13, borderBottom: `1px solid ${C.grayLight}` }}>
+                      <span style={{ color: C.textSec }}>{m.merchant}</span>
+                      <span style={{ fontWeight: 600, color: C.text }}>{fmt(m.total)} <span style={{ color: C.textMut, fontWeight: 400 }}>({m.count}x)</span></span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   // ─── AI ───
   const AI = () => (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 70px)' }}>
@@ -424,13 +841,14 @@ export default function CasaFinance() {
     <div style={{ background: C.bg, minHeight: '100vh', maxWidth: 420, margin: '0 auto', fontFamily: "'SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", position: 'relative' }}>
       {tab === 'dashboard' && <Dashboard />}
       {tab === 'bills' && <Bills />}
+      {tab === 'spending' && <Spending />}
       {tab === 'debt' && <Debt />}
       {tab === 'ai' && <AI />}
 
       {/* Bottom nav */}
       <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 420, background: C.card, borderTop: `1px solid ${C.cardBorder}`, display: 'flex', justifyContent: 'space-around', padding: '8px 0 20px', zIndex: 100 }}>
         {navItems.map(n => (
-          <button key={n.id} onClick={() => setTab(n.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, color: tab === n.id ? C.primary : C.textMut, padding: '6px 12px', minWidth: 60 }}>
+          <button key={n.id} onClick={() => setTab(n.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, color: tab === n.id ? C.primary : C.textMut, padding: '6px 8px', minWidth: 48 }}>
             <span style={{ fontSize: 20 }}>{n.emoji}</span>
             <span style={{ fontSize: 11, fontWeight: tab === n.id ? 700 : 500 }}>{n.label}</span>
           </button>
@@ -441,6 +859,9 @@ export default function CasaFinance() {
       {debtModal && <DebtModal debt={debtModal} onConfirm={handleDebtUpdate} onClose={() => setDebtModal(null)} />}
       {editModal && <EditBillModal bill={editModal} onConfirm={handleEditBill} onClose={() => setEditModal(null)} />}
       {celebration && <Celebration cardName={celebration} onClose={() => setCelebration(null)} />}
+      {txnModal && <TransactionModal initial={txnModal} onConfirm={handleSaveTransaction} onClose={() => setTxnModal(null)} />}
+      {balanceModal && <SetBalanceModal current={balances} onConfirm={async (acc, bal, note) => { await setAccountBalance(acc, bal, note); setBalanceModal(false); }} onClose={() => setBalanceModal(false)} />}
+      {alertModal && <AlertConfigModal alerts={spendingAlerts} onSave={setSpendingAlert} onRemove={removeSpendingAlert} onClose={() => setAlertModal(false)} />}
     </div>
   );
 }

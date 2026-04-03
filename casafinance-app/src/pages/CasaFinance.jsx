@@ -817,7 +817,7 @@ export default function CasaFinance() {
 
   // ─── AI ───
   const AI = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 70px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 70px)' }}>
       <div style={{ padding: '20px 16px 10px' }}>
         <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>AI Assistant</div>
       </div>
@@ -839,11 +839,11 @@ export default function CasaFinance() {
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', maxWidth: 420, margin: '0 auto', fontFamily: "'SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", position: 'relative' }}>
-      {tab === 'dashboard' && <Dashboard />}
-      {tab === 'bills' && <Bills />}
-      {tab === 'spending' && <Spending />}
-      {tab === 'debt' && <Debt />}
-      {tab === 'ai' && <AI />}
+      {tab === 'dashboard' && Dashboard()}
+      {tab === 'bills' && Bills()}
+      {tab === 'spending' && Spending()}
+      {tab === 'debt' && Debt()}
+      {tab === 'ai' && AI()}
 
       {/* Bottom nav */}
       <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 420, background: C.card, borderTop: `1px solid ${C.cardBorder}`, display: 'flex', justifyContent: 'space-around', padding: '8px 0 20px', zIndex: 100 }}>
